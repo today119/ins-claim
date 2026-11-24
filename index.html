@@ -177,11 +177,13 @@ function ageTag(r){
   if(r.st==='todo'){const n=days(endOf(r));if(n>=900)return `<span class="d">⏰ ${n}일째 · 청구 기한 3년 임박!</span>`;return n>=0?`<span class="d ${n<14?'o':''}">${n===0?'오늘':n+'일째'}</span>`:''}
   if(r.st==='sent'&&r.sentAt){const n=days(r.sentAt);return `<span class="d b">청구 ${n===0?'오늘':n+'일째'}</span>`}
   return ''}
-function card(r){const m=memOf(r.mem),k=KINDS.find(x=>x[1]===r.kind);
+const kindsOf=r=>(r.kind||'').split(',').filter(Boolean);
+const kindTxt=r=>kindsOf(r).map(k=>((KINDS.find(x=>x[1]===k)||[''])[0])+k).join(' ');
+function card(r){const m=memOf(r.mem),k=kindTxt(r);
   const per=r.to&&r.to!==r.from?`${md(r.from)}~${md(r.to)}`:md(r.from);
   return `<div class="card ${r.st}" data-op="${r.id}">
    <div class="c1"><span class="who">${m.em}</span><span class="dx">${esc(r.dx||'(진단명 없음)')}</span>${stTag(r)}</div>
-   <div class="c2">${per} · ${m.name}${r.hosp?' · '+esc(r.hosp):''}${k?' · '+k[0]+k[1]:''}${r.ins?' · 🛡️'+esc(r.ins):''}</div>
+   <div class="c2">${per} · ${m.name}${r.hosp?' · '+esc(r.hosp):''}${k?' · '+k:''}${r.ins?' · 🛡️'+esc(r.ins):''}</div>
    <div class="c3"><span>병원비 <b>${won(r.cost)}</b></span>${r.claim?`<span>청구 <b>${won(r.claim)}</b></span>`:''}${r.st==='paid'?`<span style="color:#1f8a68">받음 <b>${won(r.pay)}</b></span>`:''}${ageTag(r)}</div>
    ${r.st==='todo'?`<div class="qa"><button class="sbtn b" data-snd="${r.id}">📮 청구했어요</button><button class="sbtn gr" data-non="${r.id}">🚫 청구 안 해요</button></div>`:''}
    ${r.st==='sent'?`<div class="qa"><button class="sbtn g" data-pd="${r.id}">💰 돈 들어왔어요</button></div>`:''}
@@ -233,13 +235,13 @@ function report(){const Y=String(S.yr),yr=vis().filter(r=>(r.from||'').startsWit
   h+=`<tr class="tot">${row('합계',yr)}</tr></table>`;
   const ins=[...new Set(yr.map(r=>r.ins||'(보험사 미정)'))];
   h+=`<div class="lbl">🛡️ 보험사별</div><table class="tbl">${head}`;ins.forEach(i=>{h+=`<tr>${row(esc(i),yr.filter(r=>(r.ins||'(보험사 미정)')===i))}</tr>`});h+='</table>';
-  h+=`<div class="lbl">🏥 외래·입원별</div><table class="tbl">${head}`;KINDS.forEach(([e,k])=>{const L=yr.filter(r=>r.kind===k);if(L.length)h+=`<tr>${row(e+' '+k,L)}</tr>`});h+='</table>';
+  h+=`<div class="lbl">🏥 구분별 <span class="note">(두 가지를 고른 기록은 양쪽에 다 들어가요)</span></div><table class="tbl">${head}`;KINDS.forEach(([e,k])=>{const L=yr.filter(r=>kindsOf(r).includes(k));if(L.length)h+=`<tr>${row(e+' '+k,L)}</tr>`});h+='</table>';
   h+=`<div class="lbl">📅 달별</div><table class="tbl">${head}`;for(let m=1;m<=12;m++){const L=yr.filter(r=>+r.from.slice(5,7)===m);if(L.length)h+=`<tr>${row(m+'월',L)}</tr>`}h+='</table>';
   h+=`<button class="sbtn g" id="csv" style="width:100%;padding:11px">📥 엑셀(CSV)로 내려받기</button>`;
   setTimeout(()=>{const b=$('#csv');if(b)b.onclick=csv},0);return h}
 function csv(){const L=vis().filter(r=>(r.from||'').startsWith(String(S.yr))).sort((a,b)=>a.from<b.from?-1:1);
   const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
-  const rows=[['누구','진료 시작','진료 끝','병원','진단명','구분','병원비','보험사','상태','청구일','청구 금액','받은 날','받은 금액','메모']].concat(L.map(r=>[memOf(r.mem).name,r.from,r.to||'',r.hosp,r.dx,r.kind,r.cost||0,r.ins,STS.find(s=>s[0]===r.st)[1].slice(2).trim(),r.sentAt||'',r.claim||'',r.paidAt||'',r.st==='paid'?r.pay||0:'',r.memo]));
+  const rows=[['누구','진료 시작','진료 끝','병원','진단명','구분','병원비','보험사','상태','청구일','청구 금액','받은 날','받은 금액','메모']].concat(L.map(r=>[memOf(r.mem).name,r.from,r.to||'',r.hosp,r.dx,kindsOf(r).join('·'),r.cost||0,r.ins,STS.find(s=>s[0]===r.st)[1].slice(2).trim(),r.sentAt||'',r.claim||'',r.paidAt||'',r.st==='paid'?r.pay||0:'',r.memo]));
   const b=new Blob(['﻿'+rows.map(x=>x.map(q).join(',')).join('\r\n')],{type:'text/csv'});
   const u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=`보험청구_${S.yr}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(u),2000)}
 
@@ -256,11 +258,11 @@ function openRec(id){
   const draw=()=>{
     openSheet(`<h2>${old?'✏️ 기록 고치기':'🏥 병원 다녀왔어요'}<button class="x">✕</button></h2>
     <div class="lbl">누가?</div><div class="chips">${S.mems.map(m=>`<button class="chip ${r.mem===m.id?'on':''}" data-mm="${m.id}">${m.em} ${esc(m.name)}</button>`).join('')}</div>
-    <div class="lbl">${r.kind==='입원'?'입원한 날 ~ 퇴원한 날':'언제?'} <button class="chip ${multi?'on':''}" id="mul" style="font-size:15px;padding:3px 10px;margin-left:6px">여러 날(입원·통원)</button></div>
+    <div class="lbl">${kindsOf(r).includes('입원')?'입원한 날 ~ 퇴원한 날':'언제?'} <button class="chip ${multi?'on':''}" id="mul" style="font-size:15px;padding:3px 10px;margin-left:6px">여러 날(입원·통원)</button></div>
     <div class="row"><input class="inp" type="date" id="f1" value="${r.from}">${multi?`<input class="inp" type="date" id="f2" value="${r.to||r.from}">`:''}</div>
     <div class="lbl">병원</div><input class="inp" id="hp" list="hpl" value="${esc(r.hosp)}" placeholder="예: 연세소아과"><datalist id="hpl">${recent('hosp').filter(v=>!S.hosps.includes(v)).map(v=>`<option value="${esc(v)}">`).join('')}</datalist>${S.hosps.length?favRow('hp',S.hosps,r.hosp):'<div class="note">⚙️ 설정에서 자주 가는 병원을 넣어 두면 여기서 바로 눌러요</div>'}
     <div class="lbl">진단명</div><input class="inp" id="dx" list="dxl" value="${esc(r.dx)}" placeholder="예: 급성 기관지염, 장염"><datalist id="dxl">${recent('dx').map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
-    <div class="lbl">구분</div><div class="chips">${KINDS.map(([e,k])=>`<button class="chip ${r.kind===k?'on':''}" data-k="${k}">${e} ${k}</button>`).join('')}</div>
+    <div class="lbl">구분 <span class="note">(여러 개 골라도 돼요)</span></div><div class="chips">${KINDS.map(([e,k])=>`<button class="chip ${kindsOf(r).includes(k)?'on':''}" data-k="${k}">${e} ${k}</button>`).join('')}</div>
     <div class="lbl">병원비 (내가 낸 돈)</div>${moneyIn('cs',r.cost,'영수증 금액')}
     <div class="lbl">보험사</div><input class="inp" id="in" list="inl" value="${esc(r.ins)}" placeholder="예: KB손해보험"><datalist id="inl">${recent('ins').filter(v=>!S.inss.includes(v)).map(v=>`<option value="${esc(v)}">`).join('')}</datalist>${favRow('in',S.inss,r.ins)}
     <div class="lbl">청구는?</div><div class="chips">${STS.map(([k,l])=>`<button class="chip ${k} ${r.st===k?'on':''}" data-s="${k}">${l}</button>`).join('')}</div>
@@ -274,7 +276,7 @@ function openRec(id){
       r.hosp=$('#hp').value.trim();r.dx=$('#dx').value.trim();r.cost=num($('#cs').value);r.ins=$('#in').value.trim();r.memo=$('#mo').value.trim();
       if($('#sa'))r.sentAt=$('#sa').value;if($('#cl'))r.claim=num($('#cl').value);if($('#pa'))r.paidAt=$('#pa').value;if($('#py'))r.pay=num($('#py').value)};
     $$('[data-mm]').forEach(b=>b.onclick=()=>{grab();r.mem=b.dataset.mm;draw()});
-    $$('[data-k]').forEach(b=>b.onclick=()=>{grab();r.kind=b.dataset.k;if(r.kind==='입원')multi=true;draw()});
+    $$('[data-k]').forEach(b=>b.onclick=()=>{grab();const k=b.dataset.k,L=kindsOf(r);const on=!L.includes(k);r.kind=KINDS.map(x=>x[1]).filter(x=>x===k?on:L.includes(x)).join(',');if(on&&k==='입원')multi=true;draw()});
     $$('[data-s]').forEach(b=>b.onclick=()=>{grab();r.st=b.dataset.s;if(r.st!=='todo'&&r.st!=='none'&&!r.sentAt)r.sentAt=today();if(r.st==='paid'&&!r.paidAt)r.paidAt=today();draw()});
     $$('[data-w]').forEach(b=>b.onclick=()=>{grab();r.noWhy=b.dataset.w;draw()});
     $('#mul').onclick=()=>{grab();multi=!multi;draw()};
@@ -342,7 +344,7 @@ function openSet(){
   };draw();
 }
 /* ---------- 자동 업데이트 ---------- */
-const APPVER='20261124c';
+const APPVER='20261124d';
 let verBusy=false;
 async function checkVer(auto){if(verBusy)return;verBusy=true;try{const r=await fetch(location.pathname+'?vc='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/const APPVER='([^']+)'/);
   if(m&&m[1]!==APPVER){if(auto&&($('#ov').classList.contains('on')||document.activeElement?.tagName==='INPUT'))return;await new Promise(r=>setTimeout(r,900));location.reload();return true}}catch(e){}finally{verBusy=false}return false}
