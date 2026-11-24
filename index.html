@@ -57,6 +57,8 @@ header{background:linear-gradient(135deg,#a8e6cf,#cdeafe);padding:14px 0 12px;bo
 .c1{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .c1 .who{font-size:22px}.c1 .dx{font-size:21px;flex:1;min-width:0}
 .c2{font-size:16px;color:var(--sub);font-weight:400;margin-top:2px}
+.its{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}.its span{background:#f1f6f3;border-radius:8px;padding:2px 8px;font-size:15px;color:#4a5a55}
+.lnb{background:#f7fbf9;border:1.5px solid #dcebe4;border-radius:12px;padding:8px;margin-bottom:8px}.lnb .row{align-items:center;margin-bottom:6px}.lnb .row:last-child{margin-bottom:0}
 .c3{display:flex;gap:10px;flex-wrap:wrap;font-size:16.5px;margin-top:5px}
 .c3 span b{font-size:18px}
 .st{font-size:14.5px;border-radius:99px;padding:2px 9px;white-space:nowrap}
@@ -179,11 +181,17 @@ function ageTag(r){
   return ''}
 const kindsOf=r=>(r.kind||'').split(',').filter(Boolean);
 const kindTxt=r=>kindsOf(r).map(k=>((KINDS.find(x=>x[1]===k)||[''])[0])+k).join(' ');
+const kEm=k=>(KINDS.find(x=>x[1]===k)||[''])[0];
+function derive(r){const L=r.items;if(!L||!L.length)return r;r.from=L.map(i=>i.from).sort()[0];const e=L.map(i=>i.to||i.from).sort().pop();r.to=e!==r.from?e:'';
+  r.kind=KINDS.map(x=>x[1]).filter(k=>L.some(i=>i.kind===k)).join(',');r.cost=L.reduce((a,i)=>a+(+i.cost||0),0);return r}
+const itemTxt=i=>`${md(i.from)}${i.to&&i.to!==i.from?'~'+md(i.to):''} ${kEm(i.kind)}${i.kind} ${won(i.cost)}`;
+const kindCost=(r,k)=>r.items&&r.items.length?r.items.filter(i=>i.kind===k).reduce((a,i)=>a+(+i.cost||0),0):(kindsOf(r).includes(k)?+r.cost||0:0);
 function card(r){const m=memOf(r.mem),k=kindTxt(r);
   const per=r.to&&r.to!==r.from?`${md(r.from)}~${md(r.to)}`:md(r.from);
   return `<div class="card ${r.st}" data-op="${r.id}">
    <div class="c1"><span class="who">${m.em}</span><span class="dx">${esc(r.dx||'(진단명 없음)')}</span>${stTag(r)}</div>
    <div class="c2">${per} · ${m.name}${r.hosp?' · '+esc(r.hosp):''}${k?' · '+k:''}${r.ins?' · 🛡️'+esc(r.ins):''}</div>
+   ${r.items&&r.items.length?`<div class="its">${r.items.map(i=>`<span>${itemTxt(i)}</span>`).join('')}</div>`:''}
    <div class="c3"><span>병원비 <b>${won(r.cost)}</b></span>${r.claim?`<span>청구 <b>${won(r.claim)}</b></span>`:''}${r.st==='paid'?`<span style="color:#1f8a68">받음 <b>${won(r.pay)}</b></span>`:''}${ageTag(r)}</div>
    ${r.st==='todo'?`<div class="qa"><button class="sbtn b" data-snd="${r.id}">📮 청구했어요</button><button class="sbtn gr" data-non="${r.id}">🚫 청구 안 해요</button></div>`:''}
    ${r.st==='sent'?`<div class="qa"><button class="sbtn g" data-pd="${r.id}">💰 돈 들어왔어요</button></div>`:''}
@@ -235,13 +243,15 @@ function report(){const Y=String(S.yr),yr=vis().filter(r=>(r.from||'').startsWit
   h+=`<tr class="tot">${row('합계',yr)}</tr></table>`;
   const ins=[...new Set(yr.map(r=>r.ins||'(보험사 미정)'))];
   h+=`<div class="lbl">🛡️ 보험사별</div><table class="tbl">${head}`;ins.forEach(i=>{h+=`<tr>${row(esc(i),yr.filter(r=>(r.ins||'(보험사 미정)')===i))}</tr>`});h+='</table>';
-  h+=`<div class="lbl">🏥 구분별 <span class="note">(두 가지를 고른 기록은 양쪽에 다 들어가요)</span></div><table class="tbl">${head}`;KINDS.forEach(([e,k])=>{const L=yr.filter(r=>kindsOf(r).includes(k));if(L.length)h+=`<tr>${row(e+' '+k,L)}</tr>`});h+='</table>';
+  h+=`<div class="lbl">🏥 구분별 <span class="note">(날짜별로 나눠 넣은 기록은 줄 금액대로 나눠요)</span></div><table class="tbl">${head}`;KINDS.forEach(([e,k])=>{const L=yr.filter(r=>kindsOf(r).includes(k));if(!L.length)return;
+    const c=L.reduce((a,r)=>a+kindCost(r,k),0),p=L.filter(r=>r.st==='paid').reduce((a,r)=>a+(r.cost?(+r.pay||0)*kindCost(r,k)/r.cost:0),0),t=L.filter(r=>r.st==='todo').length;
+    h+=`<tr><td>${e} ${k}</td><td>${L.length}</td><td>${won(c)}</td><td>${won(Math.round(p))}</td><td style="color:${t?'#e24d64':'#aaa'}">${t}</td></tr>`});h+='</table>';
   h+=`<div class="lbl">📅 달별</div><table class="tbl">${head}`;for(let m=1;m<=12;m++){const L=yr.filter(r=>+r.from.slice(5,7)===m);if(L.length)h+=`<tr>${row(m+'월',L)}</tr>`}h+='</table>';
   h+=`<button class="sbtn g" id="csv" style="width:100%;padding:11px">📥 엑셀(CSV)로 내려받기</button>`;
   setTimeout(()=>{const b=$('#csv');if(b)b.onclick=csv},0);return h}
 function csv(){const L=vis().filter(r=>(r.from||'').startsWith(String(S.yr))).sort((a,b)=>a.from<b.from?-1:1);
   const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
-  const rows=[['누구','진료 시작','진료 끝','병원','진단명','구분','병원비','보험사','상태','청구일','청구 금액','받은 날','받은 금액','메모']].concat(L.map(r=>[memOf(r.mem).name,r.from,r.to||'',r.hosp,r.dx,kindsOf(r).join('·'),r.cost||0,r.ins,STS.find(s=>s[0]===r.st)[1].slice(2).trim(),r.sentAt||'',r.claim||'',r.paidAt||'',r.st==='paid'?r.pay||0:'',r.memo]));
+  const rows=[['누구','진료 시작','진료 끝','병원','진단명','구분','병원비','보험사','상태','청구일','청구 금액','받은 날','받은 금액','메모','날짜별 내역']].concat(L.map(r=>[memOf(r.mem).name,r.from,r.to||'',r.hosp,r.dx,kindsOf(r).join('·'),r.cost||0,r.ins,STS.find(s=>s[0]===r.st)[1].slice(2).trim(),r.sentAt||'',r.claim||'',r.paidAt||'',r.st==='paid'?r.pay||0:'',r.memo,(r.items||[]).map(itemTxt).join(' / ')]));
   const b=new Blob(['﻿'+rows.map(x=>x.map(q).join(',')).join('\r\n')],{type:'text/csv'});
   const u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=`보험청구_${S.yr}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(u),2000)}
 
@@ -254,16 +264,23 @@ function recent(k){return [...new Set(S.recs.slice().sort((a,b)=>a.from<b.from?1
 function openRec(id){
   const old=id&&S.recs.find(r=>r.id===id);
   const r=old?{...old}:{id:uid(),mem:S.mem!=='all'?S.mem:(S.mems[0]||{}).id,from:today(),to:'',hosp:'',dx:'',kind:'외래',cost:0,ins:(recent('ins')[0]||S.inss[0]||''),st:'todo',claim:0,pay:0,memo:''};
-  let multi=!!(r.to&&r.to!==r.from);
-  const draw=()=>{
+  let multi=!!(r.to&&r.to!==r.from);if(r.items)r.items=r.items.map(i=>({...i}));
+  const KOPT=k=>KINDS.map(([e,x])=>`<option value="${x}" ${x===k?'selected':''}>${e} ${x}</option>`).join('');
+  const lines=()=>`<div class="lbl">📑 날짜별 진료 내역 <button class="chip on" id="lnm" style="font-size:15px;padding:3px 10px;margin-left:6px">한 줄로 돌아가기</button></div>
+    ${r.items.map((i,n)=>`<div class="lnb"><div class="row"><input class="inp" type="date" data-lf="${n}" value="${i.from}">${i.kind==='입원'||i.to?`<span style="flex:none">~</span><input class="inp" type="date" data-lt="${n}" value="${i.to||i.from}">`:''}<button class="sbtn gr" style="flex:none" data-ld="${n}">✕</button></div>
+    <div class="row"><select class="inp" data-lk="${n}">${KOPT(i.kind)}</select>${moneyIn('lc'+n,i.cost,'금액')}</div></div>`).join('')}
+    <button class="sbtn" id="lad" style="width:100%;padding:10px">➕ 줄 추가</button>
+    <div class="note" style="margin-top:6px;text-align:right">병원비 합계 <b id="ltot" style="font-size:18px;color:#2d3b55">${won(r.items.reduce((a,i)=>a+(+i.cost||0),0))}</b>원 <span>(입원을 고르면 퇴원한 날 칸이 생겨요)</span></div>`;
+  const draw=()=>{const LM=!!(r.items&&r.items.length);
     openSheet(`<h2>${old?'✏️ 기록 고치기':'🏥 병원 다녀왔어요'}<button class="x">✕</button></h2>
     <div class="lbl">누가?</div><div class="chips">${S.mems.map(m=>`<button class="chip ${r.mem===m.id?'on':''}" data-mm="${m.id}">${m.em} ${esc(m.name)}</button>`).join('')}</div>
-    <div class="lbl">${kindsOf(r).includes('입원')?'입원한 날 ~ 퇴원한 날':'언제?'} <button class="chip ${multi?'on':''}" id="mul" style="font-size:15px;padding:3px 10px;margin-left:6px">여러 날(입원·통원)</button></div>
+    ${LM?'':`<div class="lbl">${kindsOf(r).includes('입원')?'입원한 날 ~ 퇴원한 날':'언제?'} <button class="chip ${multi?'on':''}" id="mul" style="font-size:15px;padding:3px 10px;margin-left:6px">여러 날(입원·통원)</button></div>
     <div class="row"><input class="inp" type="date" id="f1" value="${r.from}">${multi?`<input class="inp" type="date" id="f2" value="${r.to||r.from}">`:''}</div>
+    <button class="chip" id="lnm" style="font-size:15px;padding:5px 12px;margin-top:8px">📑 날짜별로 나눠 넣기 <span class="note">(검사·수액·입원을 한 번에 청구할 때)</span></button>`}
     <div class="lbl">병원</div><input class="inp" id="hp" list="hpl" value="${esc(r.hosp)}" placeholder="예: 연세소아과"><datalist id="hpl">${recent('hosp').filter(v=>!S.hosps.includes(v)).map(v=>`<option value="${esc(v)}">`).join('')}</datalist>${S.hosps.length?favRow('hp',S.hosps,r.hosp):'<div class="note">⚙️ 설정에서 자주 가는 병원을 넣어 두면 여기서 바로 눌러요</div>'}
     <div class="lbl">진단명</div><input class="inp" id="dx" list="dxl" value="${esc(r.dx)}" placeholder="예: 급성 기관지염, 장염"><datalist id="dxl">${recent('dx').map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
-    <div class="lbl">구분 <span class="note">(여러 개 골라도 돼요)</span></div><div class="chips">${KINDS.map(([e,k])=>`<button class="chip ${kindsOf(r).includes(k)?'on':''}" data-k="${k}">${e} ${k}</button>`).join('')}</div>
-    <div class="lbl">병원비 (내가 낸 돈)</div>${moneyIn('cs',r.cost,'영수증 금액')}
+    ${LM?lines():`<div class="lbl">구분 <span class="note">(여러 개 골라도 돼요)</span></div><div class="chips">${KINDS.map(([e,k])=>`<button class="chip ${kindsOf(r).includes(k)?'on':''}" data-k="${k}">${e} ${k}</button>`).join('')}</div>
+    <div class="lbl">병원비 (내가 낸 돈)</div>${moneyIn('cs',r.cost,'영수증 금액')}`}
     <div class="lbl">보험사</div><input class="inp" id="in" list="inl" value="${esc(r.ins)}" placeholder="예: KB손해보험"><datalist id="inl">${recent('ins').filter(v=>!S.inss.includes(v)).map(v=>`<option value="${esc(v)}">`).join('')}</datalist>${favRow('in',S.inss,r.ins)}
     <div class="lbl">청구는?</div><div class="chips">${STS.map(([k,l])=>`<button class="chip ${k} ${r.st===k?'on':''}" data-s="${k}">${l}</button>`).join('')}</div>
     ${r.st!=='todo'&&r.st!=='none'?`<div class="row" style="margin-top:8px"><div><div class="note">청구한 날</div><input class="inp" type="date" id="sa" value="${r.sentAt||today()}"></div><div><div class="note">청구 금액</div>${moneyIn('cl',r.claim||r.cost)}</div></div>`:''}
@@ -272,16 +289,24 @@ function openRec(id){
     <div class="lbl">메모</div><input class="inp" id="mo" value="${esc(r.memo)}" placeholder="예: 서류 - 진료비 세부내역서 필요">
     <button class="go" id="sv">💾 저장</button>${old?'<button class="del" id="dl">🗑️ 이 기록 지우기</button>':''}`);
     bindMoney();bindFav();
-    const grab=()=>{r.from=$('#f1').value||today();r.to=multi&&$('#f2')?$('#f2').value:'';if(r.to&&r.to<r.from)r.to=r.from;if(r.to===r.from)r.to='';
-      r.hosp=$('#hp').value.trim();r.dx=$('#dx').value.trim();r.cost=num($('#cs').value);r.ins=$('#in').value.trim();r.memo=$('#mo').value.trim();
+    const grab=()=>{if(LM){r.items.forEach((i,n)=>{i.from=$(`[data-lf="${n}"]`).value||i.from||today();const t=$(`[data-lt="${n}"]`);i.to=t&&t.value>i.from?t.value:'';i.kind=$(`[data-lk="${n}"]`).value;i.cost=num($('#lc'+n).value)});derive(r)}
+      else{r.from=$('#f1').value||today();r.to=multi&&$('#f2')?$('#f2').value:'';if(r.to&&r.to<r.from)r.to=r.from;if(r.to===r.from)r.to='';r.cost=num($('#cs').value)}
+      r.hosp=$('#hp').value.trim();r.dx=$('#dx').value.trim();r.ins=$('#in').value.trim();r.memo=$('#mo').value.trim();
       if($('#sa'))r.sentAt=$('#sa').value;if($('#cl'))r.claim=num($('#cl').value);if($('#pa'))r.paidAt=$('#pa').value;if($('#py'))r.pay=num($('#py').value)};
     $$('[data-mm]').forEach(b=>b.onclick=()=>{grab();r.mem=b.dataset.mm;draw()});
     $$('[data-k]').forEach(b=>b.onclick=()=>{grab();const k=b.dataset.k,L=kindsOf(r);const on=!L.includes(k);r.kind=KINDS.map(x=>x[1]).filter(x=>x===k?on:L.includes(x)).join(',');if(on&&k==='입원')multi=true;draw()});
     $$('[data-s]').forEach(b=>b.onclick=()=>{grab();r.st=b.dataset.s;if(r.st!=='todo'&&r.st!=='none'&&!r.sentAt)r.sentAt=today();if(r.st==='paid'&&!r.paidAt)r.paidAt=today();draw()});
     $$('[data-w]').forEach(b=>b.onclick=()=>{grab();r.noWhy=b.dataset.w;draw()});
-    $('#mul').onclick=()=>{grab();multi=!multi;draw()};
+    if(LM){$$('[data-lk]').forEach(x=>x.onchange=()=>{grab();draw()});
+      $$('.lnb .won input').forEach(x=>x.addEventListener('input',()=>{$('#ltot').textContent=won([...$$('.lnb .won input')].reduce((a,y)=>a+num(y.value),0))}));
+      $$('[data-ld]').forEach(b=>b.onclick=()=>{grab();if(r.items.length<2){toast('줄이 하나는 있어야 해요');return}r.items.splice(+b.dataset.ld,1);derive(r);draw()});
+      $('#lad').onclick=()=>{grab();const last=r.items[r.items.length-1];const d=new Date((last.to||last.from)+'T00:00');d.setDate(d.getDate()+1);r.items.push({from:ds(d),to:'',kind:last.kind,cost:0});draw()};
+      $('#lnm').onclick=()=>{grab();delete r.items;multi=!!r.to;draw()};}
+    else{$('#mul').onclick=()=>{grab();multi=!multi;draw()};
+      $('#lnm').onclick=()=>{grab();r.items=[{from:r.from,to:r.to||'',kind:kindsOf(r)[0]||'외래',cost:r.cost||0}];draw()};}
     $('#sv').onclick=()=>{grab();if(!r.mem){toast('누가 갔는지 골라 주세요');return}
       if(r.st==='paid'&&!r.pay){toast('받은 금액을 넣어 주세요');return}
+      if(r.items){r.items=r.items.filter((x,n)=>x.cost||n===0);if(r.items.length<2&&!r.items[0].to){r.kind=r.items[0].kind;delete r.items}else derive(r)}
       const i=S.recs.findIndex(x=>x.id===r.id);if(i>=0)S.recs[i]=r;else S.recs.push(r);closeSheet();
       toast(r.st==='todo'?'📝 저장! 청구하면 「청구했어요」 눌러 주세요':'💾 저장했어요');if(!old)S.yr=+r.from.slice(0,4);render()};
     const dl=$('#dl');if(dl)dl.onclick=()=>{if(!dl.dataset.c){dl.dataset.c=1;dl.textContent='한 번 더 누르면 지워져요';return}S.recs=S.recs.filter(x=>x.id!==r.id);closeSheet();toast('🗑️ 지웠어요');render()};
@@ -344,7 +369,7 @@ function openSet(){
   };draw();
 }
 /* ---------- 자동 업데이트 ---------- */
-const APPVER='20261124d';
+const APPVER='20261124e';
 let verBusy=false;
 async function checkVer(auto){if(verBusy)return;verBusy=true;try{const r=await fetch(location.pathname+'?vc='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/const APPVER='([^']+)'/);
   if(m&&m[1]!==APPVER){if(auto&&($('#ov').classList.contains('on')||document.activeElement?.tagName==='INPUT'))return;await new Promise(r=>setTimeout(r,900));location.reload();return true}}catch(e){}finally{verBusy=false}return false}
