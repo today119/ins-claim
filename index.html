@@ -352,7 +352,7 @@ function openSet(){
     <input type="file" id="imf" accept=".json,application/json" style="display:none">
     <div class="lbl">💡 알아 두면 좋아요</div>
     <div class="note">· 실손보험은 진료일로부터 <b>3년 안</b>에 청구해야 해요. 3년이 다가오면 빨갛게 알려 드려요.<br>· 청구할 때 영수증과 함께 <b>진료비 세부내역서</b>를 달라는 경우가 많아요. 병원에서 같이 받아 두면 편해요.<br>· 보험사 앱에서 영수증 사진만 찍어 올려도 되는 경우가 많아요.</div>
-    <p class="note" style="margin-top:14px">🩺 보험 청구 수첩</p>`);
+    <p class="note" style="margin-top:14px">🩺 보험 청구 수첩 · 버전 ${APPVER}</p>`);
     $$('[data-mn]').forEach(i=>i.oninput=()=>{S.mems.find(m=>m.id===i.dataset.mn).name=i.value;render()});
     $$('[data-me]').forEach(b=>b.onclick=()=>{const m=S.mems.find(x=>x.id===b.dataset.me);m.em=MEMEM[(MEMEM.indexOf(m.em)+1)%MEMEM.length];render();draw()});
     $$('[data-md]').forEach(b=>b.onclick=()=>{const id=b.dataset.md;if(S.recs.some(r=>r.mem===id)){toast('이 사람 기록이 있어서 뺄 수 없어요');return}S.mems=S.mems.filter(m=>m.id!==id);if(S.mem===id)S.mem='all';render();draw()});
@@ -369,13 +369,14 @@ function openSet(){
   };draw();
 }
 /* ---------- 자동 업데이트 ---------- */
-const APPVER='20261124e';
+const APPVER='20261124f';
 let verBusy=false;
 async function checkVer(auto){if(verBusy)return;verBusy=true;try{const r=await fetch(location.pathname+'?vc='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/const APPVER='([^']+)'/);
-  if(m&&m[1]!==APPVER){if(auto&&($('#ov').classList.contains('on')||document.activeElement?.tagName==='INPUT'))return;await new Promise(r=>setTimeout(r,900));location.reload();return true}}catch(e){}finally{verBusy=false}return false}
+  if(m&&m[1]!==APPVER){if(auto&&($('#ov').classList.contains('on')||document.activeElement?.tagName==='INPUT'))return;await new Promise(r=>setTimeout(r,900));location.replace(location.pathname+'?v='+m[1]+location.hash);return true}}catch(e){}finally{verBusy=false}return false}
 async function hardReload(){toast('🔄 최신 버전 확인 중…');if(!(await checkVer(false)))location.reload()}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkVer(true)});
 setInterval(()=>{if(!document.hidden)checkVer(true)},300000);
+setTimeout(()=>checkVer(true),1500);
 
 $('#fab').onclick=()=>openRec(null);
 $('#setBtn').onclick=openSet;$('#cloud').onclick=openSet;
