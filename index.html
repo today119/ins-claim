@@ -111,7 +111,7 @@ header{background:linear-gradient(135deg,#a8e6cf,#cdeafe);padding:14px 0 12px;bo
 window.addEventListener('error',e=>{try{const b=document.createElement('div');b.style.cssText='position:fixed;left:8px;right:8px;bottom:8px;z-index:999;background:#fff0f0;border:2px solid #f66;border-radius:12px;padding:8px;font:14px sans-serif;color:#c00';b.textContent='⚠️ 오류: '+e.message+' ('+(e.lineno||'')+') — 이 화면을 캡처해서 보내주세요';b.onclick=()=>b.remove();document.body.appendChild(b)}catch(_){}});
 const KEY='ins_claim_v1';
 const MEMEM=['👩','👨','👧','👦','👵','👴','🐰','🐻','🐱','🐶'];
-const KINDS=[['🏥','외래'],['🛏️','입원'],['💊','약국'],['🔬','검사'],['🦷','치과'],['🌿','한의원'],['🚑','응급']];
+const KINDS=[['🏥','외래'],['🛏️','입원'],['💧','수액'],['💊','약국'],['🔬','검사'],['🦷','치과'],['🌿','한의원'],['🚑','응급']];
 const STS=[['todo','📝 청구 전'],['sent','📮 청구함'],['paid','💰 받았어요'],['none','🚫 안 받음']];
 const NOWHY=['금액이 작아서','보장 안 돼요','자기부담금 이하','기타'];
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
@@ -123,14 +123,16 @@ const won=n=>(+n||0).toLocaleString('ko-KR');
 const num=v=>+(String(v??'').replace(/[^0-9]/g,''))||0;
 const md=s=>s?`${+s.slice(5,7)}/${+s.slice(8,10)}`:'';
 const days=s=>Math.floor((new Date(today())-new Date(s))/864e5);
-function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.mems)return s}catch(e){}
-  return {mems:[['엄마','👩'],['아빠','👨'],['연아','👧'],['연우','👦']].map(([name,em])=>({id:uid(),name,em})),recs:[],mem:'all',tab:'all',yr:new Date().getFullYear()}}
+const DEFINS=['KB손해보험','DB손해보험'];
+function favs(s){if(!Array.isArray(s.hosps))s.hosps=[];if(!Array.isArray(s.inss))s.inss=DEFINS.slice();return s}
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.mems)return favs(s)}catch(e){}
+  return {mems:[['엄마','👩'],['아빠','👨'],['연아','👧'],['연우','👦']].map(([name,em])=>({id:uid(),name,em})),recs:[],hosps:[],inss:DEFINS.slice(),mem:'all',tab:'all',yr:new Date().getFullYear()}}
 let S=load();
 const memOf=id=>S.mems.find(m=>m.id===id)||{name:'?',em:'❔'};
 function save(){const d=dataStr();if(d!==S.lastD){S.lastD=d;S.at=Date.now();queuePush()}try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 /* ---------- 온라인 저장 (Firebase RTDB, 가족 코드) ---------- */
 const DB='https://matchmaker-28187-default-rtdb.asia-southeast1.firebasedatabase.app/ins_claim/';
-const dataStr=()=>JSON.stringify({mems:S.mems,recs:S.recs});
+const dataStr=()=>JSON.stringify({mems:S.mems,recs:S.recs,hosps:S.hosps,inss:S.inss});
 const newCode=()=>{const c='abcdefghjkmnpqrstuvwxyz23456789';let r='';crypto.getRandomValues(new Uint8Array(14)).forEach(v=>r+=c[v%c.length]);return r};
 const shareURL=()=>location.origin+location.pathname+'#f='+S.code;
 let pushT=null,syncState='',pulling=false,initAt=0;
@@ -140,7 +142,7 @@ async function push(){try{const r=await fetch(DB+S.code+'.json',{method:'PUT',bo
 async function pull(force){if(!S.code||pulling)return;pulling=true;
   try{const r=await fetch(DB+S.code+'.json?x='+Date.now());if(!r.ok)throw 0;const j=await r.json();
     if(force===true&&(S.at||0)>initAt)force=false;
-    if(j&&j.d&&(force||j.at>(S.at||0))){const d=JSON.parse(j.d);S.mems=d.mems||[];S.recs=d.recs||[];S.lastD=j.d;S.at=j.at;
+    if(j&&j.d&&(force||j.at>(S.at||0))){const d=JSON.parse(j.d);S.mems=d.mems||[];S.recs=d.recs||[];if(d.hosps)S.hosps=d.hosps;if(d.inss)S.inss=d.inss;S.lastD=j.d;S.at=j.at;
       if(S.mem!=='all'&&!S.mems.some(m=>m.id===S.mem))S.mem='all';try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}
       if(!$('#ov').classList.contains('on'))render();setCloud('ok');return 'got'}
     else if(!j||!j.d||j.at<(S.at||0)){await push();return 'pushed'}
@@ -244,28 +246,30 @@ function csv(){const L=vis().filter(r=>(r.from||'').startsWith(String(S.yr))).so
 /* ---------- 입력 창 ---------- */
 function moneyIn(id,v,ph){return `<div class="won"><input class="inp" id="${id}" inputmode="numeric" placeholder="${ph||'0'}" value="${v?won(v):''}"></div>`}
 function bindMoney(){$$('.won input').forEach(i=>i.oninput=()=>{const n=num(i.value);i.value=n?won(n):''})}
+function favRow(id,list,cur){return `<div class="chips fav" style="margin-top:6px">${list.map(v=>`<button class="chip ${v===cur?'on':''}" data-fv="${id}" data-v="${esc(v)}">${esc(v)}</button>`).join('')}</div>`}
+function bindFav(){$$('[data-fv]').forEach(b=>b.onclick=()=>{const i=$('#'+b.dataset.fv);i.value=b.dataset.v;$$(`[data-fv="${b.dataset.fv}"]`).forEach(x=>x.classList.toggle('on',x===b))})}
 function recent(k){return [...new Set(S.recs.slice().sort((a,b)=>a.from<b.from?1:-1).map(r=>r[k]).filter(Boolean))].slice(0,8)}
 function openRec(id){
   const old=id&&S.recs.find(r=>r.id===id);
-  const r=old?{...old}:{id:uid(),mem:S.mem!=='all'?S.mem:(S.mems[0]||{}).id,from:today(),to:'',hosp:'',dx:'',kind:'외래',cost:0,ins:(recent('ins')[0]||''),st:'todo',claim:0,pay:0,memo:''};
+  const r=old?{...old}:{id:uid(),mem:S.mem!=='all'?S.mem:(S.mems[0]||{}).id,from:today(),to:'',hosp:'',dx:'',kind:'외래',cost:0,ins:(recent('ins')[0]||S.inss[0]||''),st:'todo',claim:0,pay:0,memo:''};
   let multi=!!(r.to&&r.to!==r.from);
   const draw=()=>{
     openSheet(`<h2>${old?'✏️ 기록 고치기':'🏥 병원 다녀왔어요'}<button class="x">✕</button></h2>
     <div class="lbl">누가?</div><div class="chips">${S.mems.map(m=>`<button class="chip ${r.mem===m.id?'on':''}" data-mm="${m.id}">${m.em} ${esc(m.name)}</button>`).join('')}</div>
     <div class="lbl">${r.kind==='입원'?'입원한 날 ~ 퇴원한 날':'언제?'} <button class="chip ${multi?'on':''}" id="mul" style="font-size:15px;padding:3px 10px;margin-left:6px">여러 날(입원·통원)</button></div>
     <div class="row"><input class="inp" type="date" id="f1" value="${r.from}">${multi?`<input class="inp" type="date" id="f2" value="${r.to||r.from}">`:''}</div>
-    <div class="lbl">병원</div><input class="inp" id="hp" list="hpl" value="${esc(r.hosp)}" placeholder="예: 연세소아과"><datalist id="hpl">${recent('hosp').map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+    <div class="lbl">병원</div><input class="inp" id="hp" list="hpl" value="${esc(r.hosp)}" placeholder="예: 연세소아과"><datalist id="hpl">${recent('hosp').filter(v=>!S.hosps.includes(v)).map(v=>`<option value="${esc(v)}">`).join('')}</datalist>${S.hosps.length?favRow('hp',S.hosps,r.hosp):'<div class="note">⚙️ 설정에서 자주 가는 병원을 넣어 두면 여기서 바로 눌러요</div>'}
     <div class="lbl">진단명</div><input class="inp" id="dx" list="dxl" value="${esc(r.dx)}" placeholder="예: 급성 기관지염, 장염"><datalist id="dxl">${recent('dx').map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
     <div class="lbl">구분</div><div class="chips">${KINDS.map(([e,k])=>`<button class="chip ${r.kind===k?'on':''}" data-k="${k}">${e} ${k}</button>`).join('')}</div>
     <div class="lbl">병원비 (내가 낸 돈)</div>${moneyIn('cs',r.cost,'영수증 금액')}
-    <div class="lbl">보험사</div><input class="inp" id="in" list="inl" value="${esc(r.ins)}" placeholder="예: 삼성화재 실손"><datalist id="inl">${recent('ins').map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+    <div class="lbl">보험사</div><input class="inp" id="in" list="inl" value="${esc(r.ins)}" placeholder="예: KB손해보험"><datalist id="inl">${recent('ins').filter(v=>!S.inss.includes(v)).map(v=>`<option value="${esc(v)}">`).join('')}</datalist>${favRow('in',S.inss,r.ins)}
     <div class="lbl">청구는?</div><div class="chips">${STS.map(([k,l])=>`<button class="chip ${k} ${r.st===k?'on':''}" data-s="${k}">${l}</button>`).join('')}</div>
     ${r.st!=='todo'&&r.st!=='none'?`<div class="row" style="margin-top:8px"><div><div class="note">청구한 날</div><input class="inp" type="date" id="sa" value="${r.sentAt||today()}"></div><div><div class="note">청구 금액</div>${moneyIn('cl',r.claim||r.cost)}</div></div>`:''}
     ${r.st==='paid'?`<div class="row" style="margin-top:8px"><div><div class="note">받은 날</div><input class="inp" type="date" id="pa" value="${r.paidAt||today()}"></div><div><div class="note">받은 금액</div>${moneyIn('py',r.pay)}</div></div>`:''}
     ${r.st==='none'?`<div class="chips" style="margin-top:8px">${NOWHY.map(w=>`<button class="chip ${r.noWhy===w?'on none':''}" data-w="${w}">${w}</button>`).join('')}</div>`:''}
     <div class="lbl">메모</div><input class="inp" id="mo" value="${esc(r.memo)}" placeholder="예: 서류 - 진료비 세부내역서 필요">
     <button class="go" id="sv">💾 저장</button>${old?'<button class="del" id="dl">🗑️ 이 기록 지우기</button>':''}`);
-    bindMoney();
+    bindMoney();bindFav();
     const grab=()=>{r.from=$('#f1').value||today();r.to=multi&&$('#f2')?$('#f2').value:'';if(r.to&&r.to<r.from)r.to=r.from;if(r.to===r.from)r.to='';
       r.hosp=$('#hp').value.trim();r.dx=$('#dx').value.trim();r.cost=num($('#cs').value);r.ins=$('#in').value.trim();r.memo=$('#mo').value.trim();
       if($('#sa'))r.sentAt=$('#sa').value;if($('#cl'))r.claim=num($('#cl').value);if($('#pa'))r.paidAt=$('#pa').value;if($('#py'))r.pay=num($('#py').value)};
@@ -283,9 +287,9 @@ function openRec(id){
 }
 function openSend(id){const r=S.recs.find(x=>x.id===id);
   openSheet(`<h2>📮 청구했어요<button class="x">✕</button></h2><div class="note">${memOf(r.mem).em} ${esc(r.dx)} · ${md(r.from)} · 병원비 ${won(r.cost)}원</div>
-  <div class="lbl">보험사</div><input class="inp" id="in" list="inl" value="${esc(r.ins||recent('ins')[0]||'')}"><datalist id="inl">${recent('ins').map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+  <div class="lbl">보험사</div><input class="inp" id="in" list="inl" value="${esc(r.ins||recent('ins')[0]||S.inss[0]||'')}"><datalist id="inl">${recent('ins').filter(v=>!S.inss.includes(v)).map(v=>`<option value="${esc(v)}">`).join('')}</datalist>${favRow('in',S.inss,r.ins||recent('ins')[0]||S.inss[0]||'')}
   <div class="row" style="margin-top:4px"><div><div class="lbl">청구한 날</div><input class="inp" type="date" id="sa" value="${today()}"></div><div><div class="lbl">청구 금액</div>${moneyIn('cl',r.claim||r.cost)}</div></div>
-  <button class="go" id="sv">📮 청구 완료!</button>`);bindMoney();
+  <button class="go" id="sv">📮 청구 완료!</button>`);bindMoney();bindFav();
   $('#sv').onclick=()=>{r.ins=$('#in').value.trim();r.sentAt=$('#sa').value||today();r.claim=num($('#cl').value);r.st='sent';closeSheet();toast('📮 청구 완료! 돈 들어오면 「받았어요」');render()}}
 function openPaid(id){const r=S.recs.find(x=>x.id===id);
   openSheet(`<h2>💰 돈 들어왔어요<button class="x">✕</button></h2><div class="note">${memOf(r.mem).em} ${esc(r.dx)} · ${esc(r.ins||'')} · 청구 ${won(r.claim||r.cost)}원</div>
@@ -304,6 +308,9 @@ function openSet(){
     <div class="lbl">👨‍👩‍👧‍👦 가족 <span class="note">(얼굴을 누르면 바뀌어요)</span></div>
     ${S.mems.map(m=>`<div class="row" style="margin-bottom:6px;align-items:center"><button class="chip" style="flex:none;font-size:22px" data-me="${m.id}">${m.em}</button><input class="inp" data-mn="${m.id}" value="${esc(m.name)}" maxlength="10"><button class="sbtn gr" style="flex:none" data-md="${m.id}">빼기</button></div>`).join('')}
     <div class="row"><input class="inp" id="nm" placeholder="이름 (예: 할머니)" maxlength="10"><button class="sbtn g" style="flex:none" id="am">➕ 추가</button></div>
+    ${[['hosps','🏥 자주 가는 병원','예: 연세소아과'],['inss','🛡️ 보험사','예: 삼성화재']].map(([k,t,ph])=>`<div class="lbl">${t} <span class="note">(기록할 때 바로 눌러요 · ✕로 빼기)</span></div>
+    <div class="chips">${S[k].map((v,i)=>`<button class="chip" data-fx="${k}" data-i="${i}">${esc(v)} ✕</button>`).join('')||'<span class="note">아직 없어요</span>'}</div>
+    <div class="row" style="margin-top:6px"><input class="inp" id="fa_${k}" placeholder="${ph}" maxlength="20"><button class="sbtn g" style="flex:none" data-fa="${k}">➕ 추가</button></div>`).join('')}
     <div class="lbl">☁️ 온라인 저장 · 가족 링크</div>
     <div class="box">기록은 <b>온라인에 저장</b>돼요. <b>우리 가족 링크</b>로 열면 폰·PC 어디서든 같은 기록이 보여요.<br><span class="note">⚠️ 진단명 같은 건강 정보가 있어요. 링크는 <b>가족끼리만</b> 나눠 주세요.</span>
       <div class="code" style="margin-top:8px">우리 가족 코드 <b>${S.code}</b> <span class="note">${{ok:'✅ 저장됨',busy:'⏳ 저장 중',off:'⚠️ 인터넷 확인'}[syncState]||''}</span></div>
@@ -323,17 +330,19 @@ function openSet(){
     $$('[data-me]').forEach(b=>b.onclick=()=>{const m=S.mems.find(x=>x.id===b.dataset.me);m.em=MEMEM[(MEMEM.indexOf(m.em)+1)%MEMEM.length];render();draw()});
     $$('[data-md]').forEach(b=>b.onclick=()=>{const id=b.dataset.md;if(S.recs.some(r=>r.mem===id)){toast('이 사람 기록이 있어서 뺄 수 없어요');return}S.mems=S.mems.filter(m=>m.id!==id);if(S.mem===id)S.mem='all';render();draw()});
     $('#am').onclick=()=>{const n=$('#nm').value.trim();if(!n)return;S.mems.push({id:uid(),name:n,em:MEMEM[S.mems.length%MEMEM.length]});render();draw()};
+    $$('[data-fx]').forEach(b=>b.onclick=()=>{S[b.dataset.fx].splice(+b.dataset.i,1);render();draw()});
+    $$('[data-fa]').forEach(b=>{const k=b.dataset.fa,inp=$('#fa_'+k);const add=()=>{const v=inp.value.trim();if(!v)return;if(!S[k].includes(v))S[k].push(v);render();draw()};b.onclick=add;inp.onkeydown=e=>{if(e.key==='Enter')add()}});
     $('#shr').onclick=shareLink;$('#rld').onclick=hardReload;
     const xb=$('#extb');if(xb)xb.onclick=()=>{location.href='kakaotalk://web/openExternal?url='+encodeURIComponent(shareURL())};
     $('#cgo').onclick=()=>{const v=$('#cin').value.trim().toLowerCase();if(!/^[a-z0-9]{10,16}$/.test(v)){toast('코드를 확인해 주세요');return}S.code=v;history.replaceState(null,'',shareURL());pull('hard').then(r=>{toast(r==='got'?'☁️ 불러왔어요!':'이 코드엔 기록이 없어서 지금 기록을 올렸어요');closeSheet();render()})};
-    $('#ex').onclick=()=>{const b=new Blob([JSON.stringify({app:'ins-claim',v:1,at:new Date().toISOString(),data:{mems:S.mems,recs:S.recs}},null,1)],{type:'application/json'});
+    $('#ex').onclick=()=>{const b=new Blob([JSON.stringify({app:'ins-claim',v:1,at:new Date().toISOString(),data:{mems:S.mems,recs:S.recs,hosps:S.hosps,inss:S.inss}},null,1)],{type:'application/json'});
       const u=URL.createObjectURL(b),l=document.createElement('a');l.href=u;l.download=`보험청구수첩_${today()}.json`;l.click();setTimeout(()=>URL.revokeObjectURL(u),2000)};
     $('#im').onclick=()=>$('#imf').click();
-    $('#imf').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());const d=j.data||j;if(!Array.isArray(d.recs))throw 0;S.mems=d.mems||S.mems;S.recs=d.recs;S.mem='all';closeSheet();toast('불러왔어요!');render()}catch(_){toast('이 파일은 못 읽겠어요')}};
+    $('#imf').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());const d=j.data||j;if(!Array.isArray(d.recs))throw 0;S.mems=d.mems||S.mems;S.recs=d.recs;if(d.hosps)S.hosps=d.hosps;if(d.inss)S.inss=d.inss;S.mem='all';closeSheet();toast('불러왔어요!');render()}catch(_){toast('이 파일은 못 읽겠어요')}};
   };draw();
 }
 /* ---------- 자동 업데이트 ---------- */
-const APPVER='20261124a';
+const APPVER='20261124c';
 let verBusy=false;
 async function checkVer(auto){if(verBusy)return;verBusy=true;try{const r=await fetch(location.pathname+'?vc='+Date.now(),{cache:'no-store'});const t=await r.text();const m=t.match(/const APPVER='([^']+)'/);
   if(m&&m[1]!==APPVER){if(auto&&($('#ov').classList.contains('on')||document.activeElement?.tagName==='INPUT'))return;await new Promise(r=>setTimeout(r,900));location.reload();return true}}catch(e){}finally{verBusy=false}return false}
